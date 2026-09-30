@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>CommitQuest — Turn your coding journey into a game</title>
+  <meta name="description" content="CommitQuest turns your real GitHub activity into an RPG adventure — levels, streaks, quests, achievements and a living contribution garden. Free for beginners." />
+  <meta name="theme-color" content="#f6f7fb" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)" />
+
+  <!-- Fonts: Space Grotesk (display) + Inter (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
+
+  <!-- Tailwind Play CDN (prototype constraint — see README "Trade-offs") -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    /* Every colour is a CSS custom property so ONE toggle can
+       re-skin the entire app (light is the default theme).     */
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            page:   "var(--bg-page)",
+            panel:  "var(--bg-panel)",
+            sunken: "var(--bg-sunken)",
+            line:   "var(--border-line)",
+            txt:    "var(--text-main)",
+            sub:    "var(--text-sub)",
+            faint:  "var(--text-faint)",
+            accent: "var(--accent)",
+            "accent-soft": "var(--accent-soft)",
+            onaccent: "var(--fg-on-accent)",
+            lemon:  "var(--c-lemon)",
+            coral:  "var(--c-coral)",
+            violet: "var(--c-violet)",
+            mint:   "var(--c-mint)",
+          },
+          fontFamily: {
+            display: ['"Space Grotesk"', 'ui-sans-serif', 'system-ui'],
+            body: ['Inter', 'ui-sans-serif', 'system-ui'],
+          },
+          boxShadow: {
+            glow: "var(--shadow-glow)",
+            card: "var(--shadow-card)",
+          },
+        }
+      }
+    };
+  </script>
+
+  <!-- Theme manager (must load before first paint) -->
+  <script src="js/theme.js"></script>
+  <script>CQ.theme.initEarly();</script>
+
+  <!-- Chart.js for the velocity chart -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    /* ---------- Theme tokens ------------------------------ */
+    :root {
+      color-scheme: light;
+      --bg-page:   #f6f7fb;
+      --bg-panel:  #ffffff;
+      --bg-sunken: #f1f5f9;
+      --border-line: #e2e8f0;
+      --text-main: #17203a;
+      --text-sub:  #55607a;
+      --text-faint:#8a94ab;
+      --accent:    #10b981;              /* emerald — primary CTA */
+      --accent-soft: rgba(16,185,129,.12);
+      --fg-on-accent: #ffffff;
+      --shadow-glow: 0 0 32px rgba(16,185,129,.18);
+      --shadow-card: 0 10px 30px rgba(23,32,58,.07);
+      --ambient-a: rgba(109,92,232,.08);
+      --ambient-b: rgba(16,185,129,.08);
+      --ambient-c: rgba(224,90,43,.06);
+      --grid-line: rgba(23,32,58,.04);
+      --xp-a: #10b981; --xp-b: #34d399;
+      --heat-text-shadow: none;
+    }
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg-page:   #0b1020;
+      --bg-panel:  #141a30;
+      --bg-sunken: #0e1428;
+      --border-line: #232b47;
+      --text-main: #eef2f9;
+      --text-sub:  #9aa6bf;
+      --text-faint:#64748b;
+      --accent:    #eaff5c;
+      --accent-soft: rgba(234,255,92,.10);
+      --fg-on-accent: #0b1020;
+      --shadow-glow: 0 0 40px rgba(234,255,92,.14);
+      --shadow-card: 0 12px 40px rgba(0,0,0,.35);
+      --ambient-a: rgba(139,127,255,.16);
+      --ambient-b: rgba(234,255,92,.07);
+      --ambient-c: rgba(255,122,89,.10);
+      --grid-line: rgba(255,255,255,.028);
+      --xp-a: #eaff5c; --xp-b: #5eead4;
+    }
+
+    /* In the LIGHT theme, swap the neon accents for AA-readable
+       variants and route "lemon" usage onto the emerald accent. */
+    [data-theme="light"] .bg-lemon   { background-color: var(--accent); color: #fff; }
+    [data-theme="light"] .text-lemon { color: #047857; }
+    [data-theme="light"] .text-mint  { color: #0d9463; }
+    [data-theme="light"] .text-coral { color: #d9541f; }
+    [data-theme="light"] .text-violet{ color: #5b4bdb; }
+    [data-theme="light"] .border-coral\/30 { border-color: rgba(217,84,31,.35); }
+    [data-theme="light"] .border-coral\/40 { border-color: rgba(217,84,31,.45); }
+    /* Gradient stops resolve through the var() colour tokens, so
+       light/dark gradients stay readable without extra overrides. */
+    [data-theme="light"] .from-coral\/10 { --tw-gradient-from: rgba(224,90,43,.10) var(--tw-gradient-from-position); }
+    [data-theme="light"] .marquee-track  { color: #64748b; }
+
+    html { scroll-behavior: smooth; }
+    body { background: var(--bg-page); transition: background .3s ease, color .3s ease; }
+
+    /* Layered ambient background: two soft glows + faint grid */
+    .bg-ambient {
+      background-image:
+        radial-gradient(900px 500px at 85% -10%, var(--ambient-a), transparent 60%),
+        radial-gradient(800px 500px at -10% 25%, var(--ambient-b), transparent 60%),
+        radial-gradient(700px 600px at 50% 110%, var(--ambient-c), transparent 60%),
+        linear-gradient(var(--grid-line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+      background-size: auto, auto, auto, 44px 44px, 44px 44px;
+    }
+
+    /* Scroll reveal */
+    .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+    .reveal.in { opacity: 1; transform: none; }
+
+    /* Contribution heatmap cells */
+    .heat-cell { width: 13px; height: 13px; border-radius: 3.5px; flex: none; }
+    #garden { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 13px); gap: 3px; }
+
+    /* XP bar shimmer */
+    @keyframes shimmer { 0% {background-position: -200% 0} 100% {background-position: 200% 0} }
+    .xp-fill {
+      background: linear-gradient(90deg, var(--xp-a), var(--xp-b), var(--xp-a));
+      background-size: 200% 100%; animation: shimmer 3.2s linear infinite;
+      transition: width 1.1s cubic-bezier(.2,.7,.2,1);
+    }
+
+    /* Toasts */
+    #toasts { position: fixed; right: 16px; bottom: 16px; z-index: 80; display:flex; flex-direction:column; gap:10px; max-width: min(92vw, 360px); }
+    .toast {
+      background: var(--bg-panel); border:1px solid var(--border-line); border-left:4px solid var(--accent);
+      color: var(--text-main);
+      border-radius:12px; padding:12px 14px; box-shadow:var(--shadow-card);
+      transform: translateY(14px); opacity:0; transition:.35s ease; font-size:14px;
+    }
+    .toast.show { transform:none; opacity:1; }
+
+    /* Confetti canvas */
+    #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+
+    /* Marquee ticker */
+    @keyframes marquee { from { transform: translateX(0) } to { transform: translateX(-50%) } }
+    .marquee-track { animation: marquee 26s linear infinite; }
+
+    /* Floating hero chips */
+    @keyframes floaty { 0%,100% { transform: translateY(0) rotate(var(--r,0deg)) } 50% { transform: translateY(-10px) rotate(var(--r,0deg)) } }
+    .floaty { animation: floaty 5s ease-in-out infinite; }
+
+    ::selection { background: var(--accent); color: var(--fg-on-accent); }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { transition: none; opacity: 1; transform: none; }
+      .floaty, .xp-fill, .marquee-track { animation: none !important; }
+      html { scroll-behavior: auto; }
+    }
+  </style>
+</head>
+
+<body class="bg-page text-txt font-body antialiased overflow-x-hidden">
+
+  <!-- ============ NAV ============ -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-page/80 border-b border-line">
+    <nav class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+      <a href="#top" class="flex items-center gap-2.5 group">
+        <span class="grid place-items-center w-9 h-9 rounded-xl bg-lemon text-onaccent font-display font-bold text-lg shadow-glow group-hover:rotate-6 transition-transform">Q</span>
+        <span class="font-display font-bold text-lg tracking-tight text-txt">Commit<span class="text-lemon">Quest</span></span>
+      </a>
+      <div class="hidden md:flex items-center gap-7 text-sm text-sub">
+        <a href="#how" class="hover:text-accent transition-colors">How it works</a>
+        <a href="#features" class="hover:text-accent transition-colors">Features</a>
+        <a href="#garden-section" class="hover:text-accent transition-colors">Garden</a>
+        <a href="#faq" class="hover:text-accent transition-colors">FAQ</a>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="theme-toggle" type="button"
+                class="grid place-items-center w-9 h-9 rounded-xl border border-line bg-panel hover:border-accent transition-colors text-base"
+                aria-label="Switch theme">
+          <span class="tt-icon" aria-hidden="true">🌙</span>
+        </button>
+        <a href="#dashboard" class="rounded-xl bg-accent text-onaccent font-semibold text-sm px-4 py-2 hover:bg-accent/85 transition-colors">Try the demo ↓</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section id="top" class="relative">
+    <div class="max-w-6xl mx-auto px-5 pt-16 pb-14 md:pt-24 md:pb-20 grid md:grid-cols-[1.1fr_.9fr] gap-12 items-center">
+
+      <div>
+        <p class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-mint border border-mint/40 bg-mint/10 rounded-full px-3.5 py-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-mint animate-pulse"></span> Built live at FirstCommit · 100% free
+        </p>
+        <h1 class="font-display font-bold text-txt text-4xl sm:text-5xl md:text-6xl leading-[1.05] mt-5 tracking-tight">
+          Your coding journey,<br />
+          played like a<br />
+          <span class="text-lemon">video&nbsp;game.</span>
+        </h1>
+        <p class="text-sub text-lg mt-5 max-w-xl leading-relaxed">
+          CommitQuest turns your <strong class="text-txt">real GitHub commits</strong> into RPG levels, daily quests,
+          streak shields and a living contribution garden — so beginners actually <em>feel</em> their progress instead of staring at an empty repo.
+        </p>
+        <div class="flex flex-wrap gap-3 mt-8">
+          <button id="cta-demo" class="rounded-xl bg-lemon text-onaccent font-display font-bold px-6 py-3.5 hover:scale-[1.03] active:scale-95 transition shadow-glow">
+            ⚡ Explore the live demo
+          </button>
+          <a href="https://github.com/" target="_blank" rel="noopener" class="rounded-xl border border-line bg-panel px-6 py-3.5 font-semibold hover:border-accent transition">
+            View source on GitHub
+          </a>
+        </div>
+        <p class="text-xs text-faint mt-4">No sign-up in the demo · read-only GitHub API · your data never leaves your browser</p>
+      </div>
+
+      <!-- Hero mini-dashboard preview -->
+      <div class="relative">
+        <div class="absolute -inset-6 bg-violet/10 blur-3xl rounded-full" aria-hidden="true"></div>
+        <div class="relative rounded-2xl border border-line bg-panel shadow-card p-5 rotate-[-1.5deg] hover:rotate-0 transition-transform duration-500">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-full bg-gradient-to-br from-coral to-violet grid place-items-center font-display font-bold text-txt">L</div>
+            <div>
+              <p class="font-display font-semibold text-txt text-sm">Level 7 · Code Gardener</p>
+              <p class="text-xs text-sub">438 XP · 91 to Level 8</p>
+            </div>
+            <span class="ml-auto text-xs font-bold text-onaccent bg-lemon rounded-full px-2.5 py-1">🔥 23-day streak</span>
+          </div>
+          <div class="h-2.5 rounded-full bg-sunken border border-line mt-4 overflow-hidden">
+            <div class="h-full w-[72%] rounded-full xp-fill"></div>
+          </div>
+          <div id="hero-spark" class="mt-4 grid grid-flow-col auto-cols-[10px] gap-[4px] items-end h-14" aria-hidden="true"></div>
+          <div class="grid grid-cols-3 gap-2 mt-4 text-center">
+            <div class="rounded-lg bg-sunken border border-line py-2"><p class="font-display font-bold text-txt text-lg">142</p><p class="text-[10px] uppercase tracking-wider text-faint">Commits</p></div>
+            <div class="rounded-lg bg-sunken border border-line py-2"><p class="font-display font-bold text-txt text-lg">9</p><p class="text-[10px] uppercase tracking-wider text-faint">Quests done</p></div>
+            <div class="rounded-lg bg-sunken border border-line py-2"><p class="font-display font-bold text-txt text-lg">6</p><p class="text-[10px] uppercase tracking-wider text-faint">Badges</p></div>
+          </div>
+        </div>
+        <span class="floaty absolute -top-5 -left-4 rounded-xl bg-sunken border border-line px-3 py-1.5 text-xs font-semibold text-mint shadow-card" style="--r:-6deg">git commit -m "day 1" 🌱</span>
+        <span class="floaty absolute -bottom-4 -right-3 rounded-xl bg-sunken border border-line px-3 py-1.5 text-xs font-semibold text-coral shadow-card" style="--r:5deg; animation-delay:-2.5s">+50 XP · Night Owl badge 🦉</span>
+      </div>
+    </div>
+
+    <!-- Ticker -->
+    <div class="border-y border-line bg-panel/70 overflow-hidden py-2.5" aria-hidden="true">
+      <div class="marquee-track flex whitespace-nowrap text-xs font-semibold tracking-widest uppercase text-faint w-max">
+        <span class="mx-6">🌱 first seed planted</span><span class="mx-6 text-lemon">⚡ streak x7</span><span class="mx-6">🏹 quest complete</span><span class="mx-6 text-mint">🌳 tree unlocked</span><span class="mx-6">🦉 night owl badge</span><span class="mx-6 text-coral">🔥 streak shield ready</span><span class="mx-6">⭐ level up!</span><span class="mx-6">🚀 weekend warrior</span>
+        <span class="mx-6">🌱 first seed planted</span><span class="mx-6 text-lemon">⚡ streak x7</span><span class="mx-6">🏹 quest complete</span><span class="mx-6 text-mint">🌳 tree unlocked</span><span class="mx-6">🦉 night owl badge</span><span class="mx-6 text-coral">🔥 streak shield ready</span><span class="mx-6">⭐ level up!</span><span class="mx-6">🚀 weekend warrior</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD (core) ============ -->
+  <main id="dashboard" class="max-w-6xl mx-auto px-5 py-16">
+    <div class="flex flex-wrap items-end justify-between gap-4 reveal">
+      <div>
+        <h2 class="font-display font-bold text-txt text-3xl md:text-4xl tracking-tight">The Quest Board</h2>
+        <p class="text-sub mt-1.5">Live demo below uses a sample adventurer. Type any <strong class="text-txt">public GitHub username</strong> to load their real stats.</p>
+      </div>
+      <form id="lookup-form" class="flex gap-2">
+        <label for="username" class="sr-only">GitHub username</label>
+        <input id="username" type="text" placeholder="e.g. torvalds" autocomplete="off" spellcheck="false"
+               class="rounded-xl bg-panel border border-line px-4 py-2.5 text-sm w-44 focus:outline-none focus:border-accent placeholder:text-faint" />
+        <button class="rounded-xl bg-accent text-onaccent font-semibold text-sm px-4 py-2.5 hover:bg-accent/85 transition disabled:opacity-50" id="lookup-btn">Load →</button>
+      </form>
+    </div>
+    <p id="lookup-note" class="text-xs mt-2 h-4 text-faint reveal"></p>
+
+    <div class="grid lg:grid-cols-[1fr_340px] gap-5 mt-6">
+
+      <!-- LEFT COLUMN -->
+      <div class="space-y-5">
+
+        <!-- Player card -->
+        <section class="rounded-2xl border border-line bg-panel p-6 shadow-card reveal" aria-label="Player profile">
+          <div class="flex flex-wrap items-center gap-4">
+            <img id="p-avatar" src="" alt="Player avatar" class="w-16 h-16 rounded-2xl border border-line object-cover bg-sunken" />
+            <div class="min-w-0">
+              <p class="font-display font-bold text-txt text-xl leading-tight truncate" id="p-name">Loading…</p>
+              <p class="text-sm text-sub" id="p-title">—</p>
+            </div>
+            <div class="ml-auto text-right">
+              <p class="text-[11px] uppercase tracking-widest text-faint">Total XP</p>
+              <p class="font-display font-bold text-lemon text-2xl" id="p-xp">0</p>
+            </div>
+          </div>
+          <div class="mt-5">
+            <div class="flex justify-between text-xs text-sub mb-1.5">
+              <span id="lvl-label">Level 1 · Sprout</span><span id="lvl-next">0 / 100 XP to next level</span>
+            </div>
+            <div class="h-3 rounded-full bg-sunken border border-line overflow-hidden">
+              <div id="xp-bar" class="h-full rounded-full xp-fill" style="width:0%"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-5 text-center">
+            <div class="rounded-xl bg-sunken border border-line p-3"><p class="font-display font-bold text-txt text-xl" id="stat-commits">0</p><p class="text-[11px] uppercase tracking-wider text-faint">Commits</p></div>
+            <div class="rounded-xl bg-sunken border border-line p-3"><p class="font-display font-bold text-coral text-xl" id="stat-streak">0</p><p class="text-[11px] uppercase tracking-wider text-faint">Day streak</p></div>
+            <div class="rounded-xl bg-sunken border border-line p-3"><p class="font-display font-bold text-mint text-xl" id="stat-best">0</p><p class="text-[11px] uppercase tracking-wider text-faint">Best streak</p></div>
+            <div class="rounded-xl bg-sunken border border-line p-3"><p class="font-display font-bold text-violet text-xl" id="stat-active">0</p><p class="text-[11px] uppercase tracking-wider text-faint">Active days</p></div>
+          </div>
+        </section>
+
+        <!-- Garden -->
+        <section id="garden-section" class="rounded-2xl border border-line bg-panel p-6 shadow-card reveal" aria-label="Contribution garden">
+          <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 class="font-display font-bold text-txt text-lg">Your Contribution Garden 🌱</h3>
+              <p class="text-xs text-sub mt-0.5">Last 15 weeks. Every cell is a day — greener means more commits.</p>
+            </div>
+            <div class="flex items-center gap-1.5 text-[11px] text-faint">
+              Less <span class="heat-cell" style="background:var(--heat-0)"></span><span class="heat-cell" style="background:var(--heat-1)"></span><span class="heat-cell" style="background:var(--heat-2)"></span><span class="heat-cell" style="background:var(--heat-3)"></span><span class="heat-cell" style="background:var(--heat-4)"></span> More
+            </div>
+          </div>
+          <div class="overflow-x-auto pt-4 pb-1"><div id="garden"></div></div>
+          <p id="garden-msg" class="text-sm text-mint mt-3 hidden"></p>
+        </section>
+
+        <!-- Velocity chart -->
+        <section class="rounded-2xl border border-line bg-panel p-6 shadow-card reveal" aria-label="Commit velocity">
+          <h3 class="font-display font-bold text-txt text-lg">Commit Velocity 📈</h3>
+          <p class="text-xs text-sub mt-0.5">Weekly commit rhythm — consistency beats intensity.</p>
+          <div class="h-52 mt-4"><canvas id="velocity-chart" role="img" aria-label="Bar chart of commits per week"></canvas></div>
+        </section>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <aside class="space-y-5">
+
+        <!-- Streak -->
+        <section class="rounded-2xl border border-coral/30 bg-gradient-to-b from-coral/10 to-panel p-6 shadow-card reveal" aria-label="Streak">
+          <div class="flex items-center justify-between">
+            <h3 class="font-display font-bold text-txt text-lg">Streak 🔥</h3>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-coral border border-coral/40 rounded-full px-2.5 py-1" id="streak-phase">Warming up</span>
+          </div>
+          <p class="font-display font-bold text-txt text-5xl mt-3" id="streak-big">0</p>
+          <p class="text-sm text-sub mt-1" id="streak-sub">consecutive days with at least one commit</p>
+          <div class="mt-4 rounded-xl bg-sunken border border-line p-3 text-xs text-sub flex gap-2 items-start">
+            <span class="text-base">🛡️</span>
+            <p><strong class="text-txt">Streak Shield:</strong> miss a single day? You get <em>one</em> grace day before the streak breaks. Progress > perfection.</p>
+          </div>
+        </section>
+
+        <!-- Quests -->
+        <section class="rounded-2xl border border-line bg-panel p-6 shadow-card reveal" aria-label="Daily quests">
+          <h3 class="font-display font-bold text-txt text-lg">Daily Quests 🏹</h3>
+          <p class="text-xs text-sub mt-0.5 mb-4">Small, achievable missions. Check them off as you go.</p>
+          <ul id="quest-list" class="space-y-2.5"></ul>
+          <p class="text-xs text-faint mt-4 border-t border-line pt-3">💾 Quest progress is saved in your browser — it survives refreshes.</p>
+        </section>
+
+        <!-- Achievements -->
+        <section class="rounded-2xl border border-line bg-panel p-6 shadow-card reveal" aria-label="Achievements">
+          <h3 class="font-display font-bold text-txt text-lg">Achievements <span class="text-faint text-sm font-body" id="ach-count">(0/8)</span></h3>
+          <div id="achievements" class="grid grid-cols-4 gap-2.5 mt-4"></div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <section id="how" class="border-t border-line bg-panel/60">
+    <div class="max-w-6xl mx-auto px-5 py-16">
+      <h2 class="font-display font-bold text-txt text-3xl md:text-4xl tracking-tight reveal">How it works</h2>
+      <p class="text-sub mt-2 max-w-2xl reveal">Three steps between "I have no idea what I'm doing" and "look at my garden grow".</p>
+      <div class="grid md:grid-cols-3 gap-5 mt-9">
+        <div class="reveal rounded-2xl border border-line bg-panel p-6 relative overflow-hidden">
+          <span class="absolute -right-3 -top-5 font-display font-bold text-7xl text-lemon/10 select-none">1</span>
+          <p class="text-lemon font-display font-bold">Connect</p>
+          <h3 class="font-display font-semibold text-txt mt-1">Drop your GitHub username</h3>
+          <p class="text-sm text-sub mt-2 leading-relaxed">We fetch your public events through the GitHub REST API — read-only, no login, no OAuth, nothing leaves your browser.</p>
+        </div>
+        <div class="reveal rounded-2xl border border-line bg-panel p-6 relative overflow-hidden" style="transition-delay:.08s">
+          <span class="absolute -right-3 -top-5 font-display font-bold text-7xl text-coral/10 select-none">2</span>
+          <p class="text-coral font-display font-bold">Compute</p>
+          <h3 class="font-display font-semibold text-txt mt-1">Activity becomes a game</h3>
+          <p class="text-sm text-sub mt-2 leading-relaxed">A pure scoring engine turns commits into XP, levels, streaks and badges. Deterministic, testable, and fully explained in the docs.</p>
+        </div>
+        <div class="reveal rounded-2xl border border-line bg-panel p-6 relative overflow-hidden" style="transition-delay:.16s">
+          <span class="absolute -right-3 -top-5 font-display font-bold text-7xl text-mint/10 select-none">3</span>
+          <p class="text-mint font-display font-bold">Grow</p>
+          <h3 class="font-display font-semibold text-txt mt-1">Come back every day</h3>
+          <p class="text-sm text-sub mt-2 leading-relaxed">Daily quests give you a concrete "what should I do today?" answer — the #1 thing beginners are missing.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURES GRID (bento) ============ -->
+  <section id="features" class="max-w-6xl mx-auto px-5 py-16">
+    <h2 class="font-display font-bold text-txt text-3xl md:text-4xl tracking-tight reveal">Everything a beginner needs to keep going</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-9">
+      <div class="reveal rounded-2xl border border-line bg-panel p-6 sm:col-span-2 lg:col-span-2 bg-gradient-to-br from-violet/10 to-transparent">
+        <p class="text-3xl">🎮</p><h3 class="font-display font-semibold text-txt mt-2 text-lg">Levels &amp; XP that mean something</h3>
+        <p class="text-sm text-sub mt-1.5 max-w-md">Each commit earns XP weighted by streak bonuses. Level titles (Sprout → Code Gardener → Open Source Legend) give the grind a narrative.</p>
+      </div>
+      <div class="reveal rounded-2xl border border-line bg-panel p-6"><p class="text-3xl">🛡️</p><h3 class="font-display font-semibold text-txt mt-2">Streak Shield</h3><p class="text-sm text-sub mt-1.5">One grace day so life happening doesn't nuke your motivation.</p></div>
+      <div class="reveal rounded-2xl border border-line bg-panel p-6"><p class="text-3xl">🌱</p><h3 class="font-display font-semibold text-txt mt-2">Living garden</h3><p class="text-sm text-sub mt-1.5">Your heatmap grows plants as you hit milestones — visible proof of momentum.</p></div>
+      <div class="reveal rounded-2xl border border-line bg-panel p-6"><p class="text-3xl">🏹</p><h3 class="font-display font-semibold text-txt mt-2">Daily quests</h3><p class="text-sm text-sub mt-1.5">"Read someone's code for 15 minutes" beats "learn to code".</p></div>
+      <div class="reveal rounded-2xl border border-line bg-panel p-6"><p class="text-3xl">🔒</p><h3 class="font-display font-semibold text-txt mt-2">Privacy-first</h3><p class="text-sm text-sub mt-1.5">Zero backend, zero accounts. Everything runs client-side and stays in your browser.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section id="faq" class="border-t border-line bg-panel/60">
+    <div class="max-w-3xl mx-auto px-5 py-16">
+      <h2 class="font-display font-bold text-txt text-3xl tracking-tight reveal">FAQ</h2>
+      <div class="mt-7 space-y-3 reveal">
+        <details class="group rounded-xl border border-line bg-panel p-5 open:pb-6">
+          <summary class="font-semibold text-txt cursor-pointer list-none flex justify-between items-center">Is my GitHub data safe?<span class="text-faint group-open:rotate-45 transition-transform text-xl">+</span></summary>
+          <p class="text-sm text-sub mt-3">Yes. We only request <em>public</em> data via GitHub's read-only API, we never ask for a token or password, and nothing is stored on any server — all state lives in your browser's localStorage.</p>
+        </details>
+        <details class="group rounded-xl border border-line bg-panel p-5 open:pb-6">
+          <summary class="font-semibold text-txt cursor-pointer list-none flex justify-between items-center">I have 3 commits total. Is this useless for me?<span class="text-faint group-open:rotate-45 transition-transform text-xl">+</span></summary>
+          <p class="text-sm text-sub mt-3">That's exactly who it's for. Level 1→2 takes one commit. The whole design goal is making the <em>next small step</em> feel rewarding.</p>
+        </details>
+        <details class="group rounded-xl border border-line bg-panel p-5 open:pb-6">
+          <summary class="font-semibold text-txt cursor-pointer list-none flex justify-between items-center">Why does loading a real user sometimes fail?<span class="text-faint group-open:rotate-45 transition-transform text-xl">+</span></summary>
+          <p class="text-sm text-sub mt-3">GitHub's unauthenticated API is rate-limited to 60 requests/hour per IP. If you hit the cap, the app gracefully falls back to the demo dataset and tells you why.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="border-t border-line">
+    <div class="max-w-6xl mx-auto px-5 py-10 flex flex-wrap gap-4 items-center justify-between text-sm text-faint">
+      <p>Made with ☕ + stubbornness for <a href="#" class="text-lemon hover:underline">FirstCommit — Beginner's Paradise</a>. First commit, first level, first win.</p>
+      <p class="font-display font-semibold text-sub">Commit<span class="text-lemon">Quest</span></p>
+    </div>
+  </footer>
+
+  <div id="toasts" aria-live="polite"></div>
+  <canvas id="confetti" aria-hidden="true"></canvas>
+
+  <script src="js/engine.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/theme.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CommitQuest — Engine Tests</title>
+  <style>
+    body { font: 14px/1.6 ui-monospace, monospace; background:#f6f7fb; color:#17203a; padding:32px; }
+    h1 { color:#0f766e; } .pass { color:#0d9463; } .fail { color:#dc2626; font-weight:bold; }
+    li { margin: 4px 0; list-style:none; }
+  </style>
+</head>
+<body>
+  <h1>CommitQuest — engine unit tests</h1>
+  <ul id="out"></ul>
+  <p id="summary" style="font-size:16px;margin-top:16px"></p>
+
+  <script src="../js/engine.js"></script>
+  <script>
+    const E = window.CQ.engine;
+    const out = document.getElementById("out");
+    let pass = 0, fail = 0;
+    function t(name, fn) {
+      try { fn(); pass++; out.innerHTML += `<li class="pass">✔ ${name}</li>`; }
+      catch (e) { fail++; out.innerHTML += `<li class="fail">✘ ${name} — ${e.message}</li>`; }
+    }
+    function assert(cond, msg = "assertion failed") { if (!cond) throw new Error(msg); }
+    function eq(a, b, m) { assert(a === b, `${m || ""} got ${a}, want ${b}`); }
+    // Helper: build commits N days ago (positive hour offsets keep night-owl tests honest)
+    const DAY = E.DAY_MS;
+    function dayAgo(n, hour = 12, count = 1) {
+      const base = new Date(); base.setHours(0,0,0,0);
+      const arr = [];
+      for (let i = 0; i < count; i++) arr.push({ date: new Date(base.getTime() - n * DAY + hour * 3600e3) });
+      return arr;
+    }
+
+    t("empty history -> level 1, 0 XP", () => {
+      const s = E.evaluate([]);
+      eq(s.xp, 0); eq(s.level, 1); eq(s.streak.current, 0);
+    });
+
+    t("one commit today -> 10+ XP, streak 1", () => {
+      const s = E.evaluate(dayAgo(0));
+      eq(s.streak.current, 1);
+      eq(s.streak.best, 1);
+      assert(s.xp >= 10, "xp should be at least 10");
+      eq(s.title, "Sprout");
+    });
+
+    t("daily cap: 50 commits in one day counts as 5", () => {
+      const s = E.evaluate(dayAgo(0, 12, 50));
+      eq(s.totalCommits, 50);
+      eq(s.activeDays, 1);
+      // 5 counted * (10 + bonus<=20) => max 150, min 50
+      assert(s.xp <= 5 * (E.CONFIG.XP_PER_COMMIT + E.CONFIG.STREAK_BONUS_CAP));
+    });
+
+    t("streak: consecutive days accumulate", () => {
+      const s = E.evaluate([...dayAgo(2), ...dayAgo(1), ...dayAgo(0)]);
+      eq(s.streak.current, 3); eq(s.streak.best, 3);
+    });
+
+    t("streak shield: one missed day does NOT break current streak", () => {
+      // active days: -5, -4, -3, [gap at -2], -1, 0
+      // → shield bridges the gap; counted days are 0, -1, -3, -4 = 4.
+      const s = E.evaluate([...dayAgo(5), ...dayAgo(4), ...dayAgo(3), /*gap*/ ...dayAgo(1), ...dayAgo(0)]);
+      eq(s.streak.current, 4, "shield should bridge the gap and count day -4 too");
+      assert(s.streak.shieldUsed, "shield flag set");
+    });
+
+    t("walk stops after a single bridge (no double-bridging)", () => {
+      // active days: -6, [gap x2], -3, -2, -1, 0 → run of 4; -6 unreachable
+      const s = E.evaluate([...dayAgo(6), /*gap x2*/ ...dayAgo(3), ...dayAgo(2), ...dayAgo(1), ...dayAgo(0)]);
+      eq(s.streak.current, 4);
+    });
+
+    t("yesterday-only streak still alive (day not over)", () => {
+      const s = E.evaluate([...dayAgo(2), ...dayAgo(1)]);
+      eq(s.streak.current, 2);
+    });
+
+    t("level curve is monotonic", () => {
+      let prev = -1;
+      for (let l = 1; l <= 12; l++) { const x = E.xpForLevel(l); assert(x > prev, `level ${l}`); prev = x; }
+    });
+
+    t("levelFromXp round-trips with xpForLevel", () => {
+      for (let l = 1; l <= 10; l++) eq(E.levelFromXp(E.xpForLevel(l)), l, `at boundary of L${l}`);
+    });
+
+    t("night owl flag triggers on 23:00 commit", () => {
+      const s = E.evaluate(dayAgo(0, 23));
+      assert(s.flags.nightOwl, "should be night owl");
+    });
+
+    t("achievements unlock declaratively", () => {
+      const s = E.evaluate(dayAgo(0, 12, 1));
+      const ids = E.unlockedAchievements(s);
+      assert(ids.includes("first"), "first seed unlocked");
+      assert(!ids.includes("commits50"), "bricklayer locked");
+    });
+
+    t("plants: 8-commit day with big streak grows a tree", () => {
+      eq(E.plantFor(8, 7), "🌳"); eq(E.plantFor(5, 1), "🌷"); eq(E.plantFor(1, 0), "🌱"); eq(E.plantFor(0, 9), null);
+    });
+
+    document.getElementById("summary").innerHTML =
+      `<span class="${fail ? 'fail' : 'pass'}">${pass} passed, ${fail} failed</span>`;
+  </script>
+</body>
+</html>
