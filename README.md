@@ -4,7 +4,10 @@
 > Levels, XP, streaks with a Streak Shield, daily quests, achievements and a living contribution garden — computed from **real commits**, not vibes.
 > Built for **FirstCommit – Beginner's Paradise** (Devpost), mobile-first and 100% free.
 
-![CommitQuest dashboard](docs/screenshot.png) *(add your real screenshot at `docs/screenshot.png` before submitting — see docs/screenshot.txt)*
+<!-- TODO(submission): drop a real screenshot at `docs/screenshot.png` and uncomment
+![CommitQuest dashboard](docs/screenshot.png) -->
+
+🖼️ *Live demo deployed automatically to GitHub Pages — see the website link on this repo.*
 
 ---
 
@@ -27,6 +30,7 @@ You spend three evenings fighting `git rebase`, learn something real… and the 
 | **🏹 Daily Quests** | Concrete beginner missions ("rename one confusing variable") with XP bonuses, persisted in `localStorage` | `js/ui.js` |
 | **🏆 Achievements** | 8 declarative badges (Night Owl, Bricklayer…) — add new ones without touching UI code | `js/engine.js` |
 | **📈 Velocity chart** | Weekly commit rhythm via Chart.js — consistency beats intensity | `js/ui.js` |
+| **🌗 Light / dark theme** | One toggle re-skins every JS-painted widget (heatmap, chart, toasts, confetti); follows your OS preference on first visit | `js/theme.js` |
 | **Level-up confetti & toasts** | Dopamine, responsibly engineered | `js/ui.js` |
 
 ## 🚀 Run it (30 seconds)
